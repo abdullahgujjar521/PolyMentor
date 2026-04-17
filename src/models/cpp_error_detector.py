@@ -7,11 +7,13 @@ Strongest implementation with comprehensive C++ runtime risk detection.
 import re
 from typing import Dict, Optional, List, Set
 from .common_rules import (
-    make_result, make_no_error_result, get_lines, find_unmatched_brackets,
-    find_missing_quote, contains_break_statement, contains_return_statement,
+    make_result, make_no_error_result, make_error_result, make_multi_error_result,
+    get_lines, find_unmatched_brackets, find_missing_quote, contains_break_statement,
+    contains_zero_check, contains_null_check, contains_return_statement,
     detect_assignment_in_condition, detect_off_by_one_patterns,
-    detect_infinite_loop_patterns, detect_mixed_tabs_spaces,
-    detect_empty_condition_block, get_indent_level, is_comment_line,
+    detect_infinite_loop_patterns, detect_mixed_tabs_spaces, detect_empty_condition_block,
+    get_indent_level, is_comment_line, VariableTracker
+),
     contains_delete_after_new
 )
 
@@ -54,6 +56,40 @@ class CppErrorDetector:
             return result
         
         return make_no_error_result("cpp")
+    
+    def detect_all(self, code: str) -> Dict:
+        """
+        Detect ALL errors in C++ code using rule-based approach.
+        Returns comprehensive error list with priority sorting.
+        """
+        lines = get_lines(code)
+        all_errors = []
+        
+        # Initialize variable tracker for context-aware detection
+        var_tracker = VariableTracker()
+        var_tracker.track_from_code(lines, "cpp")
+        
+        # SYNTAX ERRORS
+        syntax_errors = self._check_syntax_errors_all(code, lines, var_tracker)
+        all_errors.extend(syntax_errors)
+        
+        # RUNTIME ERRORS
+        runtime_errors = self._check_runtime_errors_all(code, lines, var_tracker)
+        all_errors.extend(runtime_errors)
+        
+        # LOGICAL ERRORS
+        logical_errors = self._check_logical_errors_all(code, lines, var_tracker)
+        all_errors.extend(logical_errors)
+        
+        # SEMANTIC ERRORS
+        semantic_errors = self._check_semantic_errors_all(code, lines, var_tracker)
+        all_errors.extend(semantic_errors)
+        
+        # WARNINGS
+        warnings = self._check_warnings_all(code, lines, var_tracker)
+        all_errors.extend(warnings)
+        
+        return make_multi_error_result(all_errors, "cpp")
     
     def _check_syntax_errors(self, code: str, lines: List[str]) -> Optional[Dict]:
         """Check C++ syntax errors (Rules 1-10)."""

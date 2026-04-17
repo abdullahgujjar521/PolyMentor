@@ -6,11 +6,12 @@ Implements 40 rules for syntax, logical, runtime, and semantic errors.
 import re
 from typing import Dict, Optional, List, Set
 from .common_rules import (
-    make_result, make_no_error_result, get_lines, find_unmatched_brackets,
-    find_missing_quote, contains_break_statement, contains_return_statement,
+    make_result, make_no_error_result, make_error_result, make_multi_error_result,
+    get_lines, find_unmatched_brackets, find_missing_quote, contains_break_statement,
+    contains_zero_check, contains_null_check, contains_return_statement,
     detect_assignment_in_condition, detect_off_by_one_patterns,
-    detect_infinite_loop_patterns, detect_mixed_tabs_spaces,
-    detect_empty_condition_block, get_indent_level, is_comment_line
+    detect_infinite_loop_patterns, detect_mixed_tabs_spaces, detect_empty_condition_block,
+    get_indent_level, is_comment_line, VariableTracker
 )
 
 
@@ -22,36 +23,56 @@ class JavaErrorDetector:
         Detect errors in Java code using rule-based approach.
         Returns first high-confidence error found.
         """
-        lines = get_lines(code)
+        all_errors = self.detect_all(code)
         
-        # Priority order: Syntax -> Runtime -> Logical -> Semantic -> Warning
+        if not all_errors["has_error"]:
+            return {
+                "has_error": False,
+                "error_type": None,
+                "subtype": None,
+                "line": None,
+                "message": "No obvious error detected",
+                "language": "java",
+                "severity": None,
+                "rule_id": None
+            }
+        
+        # Return highest priority error for backward compatibility
+        return all_errors["highest_priority_error"]
+    
+    def detect_all(self, code: str) -> Dict:
+        """
+        Detect ALL errors in Java code using rule-based approach.
+        Returns comprehensive error list with priority sorting.
+        """
+        lines = get_lines(code)
+        all_errors = []
+        
+        # Initialize variable tracker for context-aware detection
+        var_tracker = VariableTracker()
+        var_tracker.track_from_code(lines, "java")
         
         # SYNTAX ERRORS
-        result = self._check_syntax_errors(code, lines)
-        if result and result["has_error"]:
-            return result
+        syntax_errors = self._check_syntax_errors_all(code, lines, var_tracker)
+        all_errors.extend(syntax_errors)
         
         # RUNTIME ERRORS
-        result = self._check_runtime_errors(code, lines)
-        if result and result["has_error"]:
-            return result
+        runtime_errors = self._check_runtime_errors_all(code, lines, var_tracker)
+        all_errors.extend(runtime_errors)
         
         # LOGICAL ERRORS
-        result = self._check_logical_errors(code, lines)
-        if result and result["has_error"]:
-            return result
+        logical_errors = self._check_logical_errors_all(code, lines, var_tracker)
+        all_errors.extend(logical_errors)
         
         # SEMANTIC ERRORS
-        result = self._check_semantic_errors(code, lines)
-        if result and result["has_error"]:
-            return result
+        semantic_errors = self._check_semantic_errors_all(code, lines, var_tracker)
+        all_errors.extend(semantic_errors)
         
         # WARNINGS
-        result = self._check_warnings(code, lines)
-        if result and result["has_error"]:
-            return result
+        warnings = self._check_warnings_all(code, lines, var_tracker)
+        all_errors.extend(warnings)
         
-        return make_no_error_result("java")
+        return make_multi_error_result(all_errors, "java")
     
     def _check_syntax_errors(self, code: str, lines: List[str]) -> Optional[Dict]:
         """Check Java syntax errors (Rules 1-10)."""

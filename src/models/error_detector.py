@@ -22,6 +22,11 @@ class ErrorDetector:
     
     def __init__(self):
         """Initialize language-specific detectors."""
+        from .python_error_detector import PythonErrorDetector
+        from .javascript_error_detector import JavaScriptErrorDetector
+        from .cpp_error_detector import CppErrorDetector
+        from .java_error_detector import JavaErrorDetector
+        
         self.python_detector = PythonErrorDetector()
         self.javascript_detector = JavaScriptErrorDetector()
         self.cpp_detector = CppErrorDetector()
@@ -30,44 +35,47 @@ class ErrorDetector:
     def detect(self, code: str, language: str) -> dict:
         """
         Main method to detect errors in code.
-        
-        Args:
-            code: Source code as string
-            language: Programming language (python, py, javascript, js, c++, cpp, cc, java)
-            
-        Returns:
-            Dict containing error information with format:
-            {
-                "has_error": bool,
-                "error_type": "syntax_error" or "logical_error" or "runtime_error" or "semantic_error" or "warning" or None,
-                "subtype": str or None,
-                "line": int or None,
-                "message": str,
-                "language": str,
-                "severity": "low" or "medium" or "high" or None,
-                "rule_id": str or None
-            }
+        Returns first high-confidence error found (backward compatibility).
         """
-        # Normalize language name
-        normalized_lang = normalize_language(language)
+        all_errors = self.detect_all(code, language)
         
-        # Route to appropriate language detector
-        if normalized_lang == "python":
-            return self.python_detector.detect(code)
-        elif normalized_lang == "javascript":
-            return self.javascript_detector.detect(code)
-        elif normalized_lang == "cpp":
-            return self.cpp_detector.detect(code)
-        elif normalized_lang == "java":
-            return self.java_detector.detect(code)
-        else:
+        if not all_errors["has_error"]:
             return {
                 "has_error": False,
                 "error_type": None,
                 "subtype": None,
                 "line": None,
-                "message": f"Unsupported language: {language}",
+                "message": "No obvious error detected",
                 "language": language,
                 "severity": None,
                 "rule_id": None
+            }
+        
+        # Return highest priority error for backward compatibility
+        return all_errors["highest_priority_error"]
+    
+    def detect_all(self, code: str, language: str) -> dict:
+        """
+        Detect ALL errors in code using rule-based approach.
+        Returns comprehensive error list with priority sorting.
+        """
+        language = language.lower().strip()
+        
+        # Route to appropriate language detector
+        if language in ['python', 'py']:
+            return self.python_detector.detect_all(code)
+        elif language in ['javascript', 'js']:
+            return self.javascript_detector.detect_all(code)
+        elif language in ['c++', 'cpp', 'cc']:
+            return self.cpp_detector.detect_all(code)
+        elif language in ['java']:
+            return self.java_detector.detect_all(code)
+        else:
+            return {
+                "has_error": False,
+                "errors": [],
+                "language": language,
+                "total_errors": 0,
+                "high_priority_count": 0,
+                "highest_priority_error": None
             }
